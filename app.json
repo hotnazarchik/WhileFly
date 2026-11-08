@@ -1,0 +1,46 @@
+{
+  "expo": {
+    "name": "WhileFly",
+    "slug": "whilefly",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#0B0F14",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.whilefly.app",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "Потрібно для прогнозу погоди в точці польоту.",
+        "NSLocalNetworkUsageDescription": "Потрібно для отримання телеметрії з ELRS Backpack по Wi-Fi."
+      }
+    },
+    "android": {
+      "package": "com.whilefly.app",
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "INTERNET",
+        "ACCESS_WIFI_STATE"
+      ]
+    },
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Потрібно для прогнозу погоди в точці польоту."
+        }
+      ],
+      "expo-status-bar",
+      "expo-font",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true
+          }
+        }
+      ],
+      "expo-secure-store"
+    ]
+  }
+}

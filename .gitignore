@@ -1,0 +1,19 @@
+node_modules/
+.expo/
+dist/
+web-build/
+android/
+ios/
+*.log
+.DS_Store
+
+# local config (copy .env.example → .env)
+.env
+.env.local
+
+# backend lives in its own repo / deployment
+server/
+
+# editor / tooling
+.claude/
+.vscode/
