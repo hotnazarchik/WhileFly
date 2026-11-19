@@ -10,6 +10,7 @@ import { CrsfParser } from '../telemetry/crsf';
 import { MavlinkParser } from '../telemetry/mavlink';
 import { Telemetry } from '../telemetry/types';
 import { colors } from '../theme';
+import { tr } from '../i18n';
 
 const HISTORY = 150;
 
@@ -103,20 +104,20 @@ export default function TelemetryScreen() {
   const dist = home.current && tel.lat !== undefined && tel.lon !== undefined ? haversine(home.current[0], home.current[1], tel.lat, tel.lon) : undefined;
 
   const warnings: string[] = [];
-  if (connected && tel.lq !== undefined && tel.lq < 50) warnings.push(`Низька якість лінку: LQ ${tel.lq}%`);
-  if (connected && tel.rssi1 !== undefined && tel.protocol === 'CRSF' && tel.rssi1 < -100) warnings.push(`Слабкий сигнал: ${tel.rssi1} dBm`);
-  if (perCell !== undefined && perCell < 3.5) warnings.push(`Низька напруга: ${perCell.toFixed(2)} В/банку — час додому!`);
-  if (connected && stale && (tel.packets ?? 0) > 0) warnings.push('Телеметрія не оновлюється > 1.5 с');
+  if (connected && tel.lq !== undefined && tel.lq < 50) warnings.push(tr("Низька якість лінку: LQ {0}%", tel.lq));
+  if (connected && tel.rssi1 !== undefined && tel.protocol === 'CRSF' && tel.rssi1 < -100) warnings.push(tr("Слабкий сигнал: {0} dBm", tel.rssi1));
+  if (perCell !== undefined && perCell < 3.5) warnings.push(tr("Низька напруга: {0} В/банку — час додому!", perCell.toFixed(2)));
+  if (connected && stale && (tel.packets ?? 0) > 0) warnings.push(tr("Телеметрія не оновлюється > 1.5 с"));
 
   const statusColor = status === 'connected' ? (stale ? colors.warn : colors.ok) : status === 'error' ? colors.danger : colors.muted;
 
   return (
     <SafeAreaView style={styles.screen} edges={['top']}>
       <ScrollView contentContainerStyle={styles.content}>
-        <ScreenHeader title="Телеметрія" subtitle="ELRS Backpack у реальному часі (CRSF / MAVLink)" />
+        <ScreenHeader title={tr("Телеметрія")} subtitle={tr("ELRS Backpack у реальному часі (CRSF / MAVLink)")} />
 
         <Card
-          title="Підключення"
+          title={tr("Підключення")}
           right={
             <Row>
               <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: statusColor }} />
@@ -126,7 +127,7 @@ export default function TelemetryScreen() {
         >
           <Row style={{ marginBottom: 10 }}>
             {MODES.map((m) => (
-              <Chip key={m.key} label={m.label} active={mode === m.key} onPress={() => !connected && setMode(m.key)} />
+              <Chip key={m.key} label={tr(m.label)} active={mode === m.key} onPress={() => !connected && setMode(m.key)} />
             ))}
           </Row>
           {mode !== 'demo' ? (
@@ -134,11 +135,11 @@ export default function TelemetryScreen() {
               {mode === 'websocket' ? (
                 <Input label="IP / URL Backpack" value={host} onChangeText={setHost} autoCapitalize="none" containerStyle={{ flex: 2 }} />
               ) : null}
-              <Input label="Порт" value={port} onChangeText={setPort} keyboardType="number-pad" containerStyle={{ flex: 1 }} />
+              <Input label={tr("Порт")} value={port} onChangeText={setPort} keyboardType="number-pad" containerStyle={{ flex: 1 }} />
             </Row>
           ) : null}
           <Text style={[styles.muted, { marginBottom: 10 }]}>{modeHint(mode)}</Text>
-          {connected || status === 'connecting' ? <Button title="Відключитись" variant="danger" onPress={stop} /> : <Button title="Підключитись" onPress={start} />}
+          {connected || status === 'connecting' ? <Button title={tr("Відключитись")} variant="danger" onPress={stop} /> : <Button title={tr("Підключитись")} onPress={start} />}
           {statusMsg ? <Text style={[styles.muted, { marginTop: 8 }]}>{statusMsg}</Text> : null}
         </Card>
 
@@ -151,13 +152,13 @@ export default function TelemetryScreen() {
           </Card>
         ))}
 
-        <Card title="Лінк" right={<Text style={styles.muted}>{tel.protocol ?? '—'} · {tel.packets ?? 0} пак.</Text>}>
+        <Card title={tr("Лінк")} right={<Text style={styles.muted}>{tel.protocol ?? '—'} · {tel.packets ?? 0} {tr("пак.")}</Text>}>
           <StatGrid>
             <Stat label="LQ" value={fmt(tel.lq, 0)} unit="%" color={tel.lq !== undefined ? (tel.lq < 50 ? colors.danger : tel.lq < 80 ? colors.warn : colors.ok) : undefined} small />
             <Stat label="RSSI 1" value={fmt(tel.rssi1, 0)} unit={tel.protocol === 'MAVLink' ? '' : 'dBm'} small />
             <Stat label="RSSI 2" value={fmt(tel.rssi2, 0)} unit="dBm" small />
             <Stat label="SNR" value={fmt(tel.snr, 0)} unit="dB" small />
-            <Stat label="TX Power" value={fmt(tel.txPowerMw, 0)} unit="мВт" small />
+            <Stat label="TX Power" value={fmt(tel.txPowerMw, 0)} unit={tr("мВт")} small />
             <Stat label="Downlink LQ" value={fmt(tel.downLq, 0)} unit="%" small />
           </StatGrid>
           {hist.lq.length > 1 ? (
@@ -169,23 +170,23 @@ export default function TelemetryScreen() {
           ) : null}
         </Card>
 
-        <Card title="Батарея">
+        <Card title={tr("Батарея")}>
           <StatGrid>
-            <Stat label="Напруга" value={fmt(tel.voltage, 1)} unit="В" small color={perCell !== undefined && perCell < 3.5 ? colors.danger : undefined} />
-            <Stat label="На банку" value={fmt(perCell, 2)} unit={cells ? `В (${cells}S)` : 'В'} small />
-            <Stat label="Струм" value={fmt(tel.current, 1)} unit="А" small />
-            <Stat label="Спожито" value={fmt(tel.capacity, 0)} unit="мА·год" small />
-            <Stat label="Заряд" value={fmt(tel.batteryPct, 0)} unit="%" small />
-            <Stat label="Потужність" value={tel.voltage && tel.current ? (tel.voltage * tel.current).toFixed(0) : '—'} unit="Вт" small />
+            <Stat label={tr("Напруга")} value={fmt(tel.voltage, 1)} unit={tr("В")} small color={perCell !== undefined && perCell < 3.5 ? colors.danger : undefined} />
+            <Stat label={tr("На банку")} value={fmt(perCell, 2)} unit={cells ? tr("В ({0}S)", cells) : tr("В")} small />
+            <Stat label={tr("Струм")} value={fmt(tel.current, 1)} unit={tr("А")} small />
+            <Stat label={tr("Спожито")} value={fmt(tel.capacity, 0)} unit={tr("мА·год")} small />
+            <Stat label={tr("Заряд")} value={fmt(tel.batteryPct, 0)} unit="%" small />
+            <Stat label={tr("Потужність")} value={tel.voltage && tel.current ? (tel.voltage * tel.current).toFixed(0) : '—'} unit={tr("Вт")} small />
           </StatGrid>
           {hist.volt.length > 1 ? (
             <View style={{ marginTop: 12 }}>
-              <LineChart series={[{ name: 'Напруга', color: colors.warn, data: hist.volt }]} unit="В" height={90} />
+              <LineChart series={[{ name: tr("Напруга"), color: colors.warn, data: hist.volt }]} unit={tr("В")} height={90} />
             </View>
           ) : null}
         </Card>
 
-        <Card title="Положення">
+        <Card title={tr("Положення")}>
           <Row style={{ alignItems: 'center', gap: 16 }}>
             <Horizon pitch={tel.pitch ?? 0} roll={tel.roll ?? 0} size={150} />
             <View style={{ flex: 1, gap: 8 }}>
@@ -195,38 +196,38 @@ export default function TelemetryScreen() {
             </View>
           </Row>
           <View style={{ marginTop: 10 }}>
-            <KV k="Режим польоту" v={tel.flightMode ?? '—'} />
-            <KV k="Стан" v={tel.armed === undefined ? '—' : tel.armed ? 'ARMED' : 'DISARMED'} />
-            <KV k="Варіометр" v={tel.vario !== undefined ? `${tel.vario.toFixed(1)} м/с` : '—'} />
+            <KV k={tr("Режим польоту")} v={tel.flightMode ?? '—'} />
+            <KV k={tr("Стан")} v={tel.armed === undefined ? '—' : tel.armed ? 'ARMED' : 'DISARMED'} />
+            <KV k={tr("Варіометр")} v={tel.vario !== undefined ? tr("{0} м/с", tel.vario.toFixed(1)) : '—'} />
           </View>
         </Card>
 
         <Card title="GPS">
           <StatGrid>
-            <Stat label="Швидкість" value={fmt(tel.groundSpeedKmh, 0)} unit="км/год" small />
-            <Stat label="Висота" value={fmt(tel.altitudeM ?? tel.baroAltM, 0)} unit="м" small />
-            <Stat label="До дому" value={dist !== undefined ? dist.toFixed(0) : '—'} unit="м" small />
-            <Stat label="Супутники" value={fmt(tel.sats, 0)} small color={tel.sats !== undefined && tel.sats < 6 ? colors.warn : undefined} />
-            <Stat label="Курс" value={fmt(tel.headingDeg, 0)} unit="°" small />
+            <Stat label={tr("Швидкість")} value={fmt(tel.groundSpeedKmh, 0)} unit={tr("км/год")} small />
+            <Stat label={tr("Висота")} value={fmt(tel.altitudeM ?? tel.baroAltM, 0)} unit={tr("м")} small />
+            <Stat label={tr("До дому")} value={dist !== undefined ? dist.toFixed(0) : '—'} unit={tr("м")} small />
+            <Stat label={tr("Супутники")} value={fmt(tel.sats, 0)} small color={tel.sats !== undefined && tel.sats < 6 ? colors.warn : undefined} />
+            <Stat label={tr("Курс")} value={fmt(tel.headingDeg, 0)} unit="°" small />
           </StatGrid>
           <View style={{ marginTop: 10 }}>
-            <KV k="Координати" v={tel.lat !== undefined && tel.lon !== undefined ? `${tel.lat.toFixed(6)}, ${tel.lon.toFixed(6)}` : '—'} />
+            <KV k={tr("Координати")} v={tel.lat !== undefined && tel.lon !== undefined ? `${tel.lat.toFixed(6)}, ${tel.lon.toFixed(6)}` : '—'} />
           </View>
           {hist.alt.length > 1 ? (
             <View style={{ marginTop: 12 }}>
-              <LineChart series={[{ name: 'Висота', color: colors.purple, data: hist.alt }]} unit="м" height={90} />
+              <LineChart series={[{ name: tr("Висота"), color: colors.purple, data: hist.alt }]} unit={tr("м")} height={90} />
             </View>
           ) : null}
         </Card>
 
-        <Card title="Сесія">
+        <Card title={tr("Сесія")}>
           <StatGrid>
-            <Stat label="Мін LQ" value={String(session.minLq)} unit="%" small />
-            <Stat label="Мін RSSI" value={session.minRssi ? String(session.minRssi) : '—'} unit="dBm" small />
-            <Stat label="Мін напруга" value={session.minVolt ? session.minVolt.toFixed(1) : '—'} unit="В" small />
-            <Stat label="Макс швидкість" value={session.maxSpeed.toFixed(0)} unit="км/год" small />
-            <Stat label="Макс висота" value={session.maxAlt.toFixed(0)} unit="м" small />
-            <Stat label="Макс дальність" value={session.maxDist.toFixed(0)} unit="м" small />
+            <Stat label={tr("Мін LQ")} value={String(session.minLq)} unit="%" small />
+            <Stat label={tr("Мін RSSI")} value={session.minRssi ? String(session.minRssi) : '—'} unit="dBm" small />
+            <Stat label={tr("Мін напруга")} value={session.minVolt ? session.minVolt.toFixed(1) : '—'} unit={tr("В")} small />
+            <Stat label={tr("Макс швидкість")} value={session.maxSpeed.toFixed(0)} unit={tr("км/год")} small />
+            <Stat label={tr("Макс висота")} value={session.maxAlt.toFixed(0)} unit={tr("м")} small />
+            <Stat label={tr("Макс дальність")} value={session.maxDist.toFixed(0)} unit={tr("м")} small />
           </StatGrid>
         </Card>
       </ScrollView>
@@ -245,17 +246,17 @@ function fmt(v: number | undefined, d: number): string {
 }
 
 function statusLabel(s: ConnStatus): string {
-  return { idle: 'Не підключено', connecting: 'Підключення…', connected: 'Онлайн', error: 'Помилка' }[s];
+  return { idle: tr("Не підключено"), connecting: tr("Підключення…"), connected: tr("Онлайн"), error: tr("Помилка") }[s];
 }
 
 function modeHint(m: TransportMode): string {
   switch (m) {
     case 'demo':
-      return 'Симуляція реального потоку CRSF — щоб перевірити екран без дрона.';
+      return tr("Симуляція реального потоку CRSF — щоб перевірити екран без дрона.");
     case 'websocket':
-      return "Підключи телефон до Wi-Fi Backpack (або мосту ESP32/ПК), що віддає сирі CRSF/MAVLink байти через WebSocket.";
+      return tr("Підключи телефон до Wi-Fi Backpack (або мосту ESP32/ПК), що віддає сирі CRSF/MAVLink байти через WebSocket.");
     case 'udp':
-      return 'ELRS Backpack у Wi-Fi режимі шле MAVLink/CRSF на UDP (типово 14550). Потрібен dev build, не Expo Go.';
+      return tr("ELRS Backpack у Wi-Fi режимі шле MAVLink/CRSF на UDP (типово 14550). Потрібен dev build, не Expo Go.");
   }
 }
 

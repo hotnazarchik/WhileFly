@@ -1,4 +1,5 @@
 import { buildCrsfFrame, CRSF } from './crsf';
+import { tr } from '../i18n';
 
 export type TransportMode = 'demo' | 'websocket' | 'udp';
 export type ConnStatus = 'idle' | 'connecting' | 'connected' | 'error';
@@ -11,6 +12,7 @@ export interface ConnectOptions {
   onStatus(status: ConnStatus, message?: string): void;
 }
 
+/** Opens a byte stream from the ELRS Backpack (or the built-in simulator). Returns a disconnect function. */
 /** Opens a byte stream from the ELRS Backpack (or the built-in simulator). Returns a disconnect function. */
 export function connect(opts: ConnectOptions): () => void {
   switch (opts.mode) {
@@ -43,9 +45,9 @@ function connectWebSocket({ host, port, onBytes, onStatus }: ConnectOptions): ()
       }
     }
   };
-  ws.onerror = () => onStatus('error', `Не вдалося з'єднатися з ${url}`);
+  ws.onerror = () => onStatus('error', tr("Не вдалося з'єднатися з {0}", url));
   ws.onclose = () => {
-    if (!closed) onStatus('error', "З'єднання закрито");
+    if (!closed) onStatus('error', tr("З'єднання закрито"));
   };
   return () => {
     closed = true;
@@ -68,7 +70,7 @@ function connectUdp({ port, onBytes, onStatus }: ConnectOptions): () => void {
     socket.on('error', (e: any) => onStatus('error', String(e?.message ?? e)));
     socket.bind(port, () => onStatus('connected', `UDP :${port}`));
   } catch (e: any) {
-    onStatus('error', 'UDP недоступний в Expo Go. Зроби dev build: npx expo run:android. ' + (e?.message ?? ''));
+    onStatus('error', tr("UDP недоступний в Expo Go. Зроби dev build: npx expo run:android. ") + (e?.message ?? ''));
   }
   return () => {
     try {
@@ -79,8 +81,9 @@ function connectUdp({ port, onBytes, onStatus }: ConnectOptions): () => void {
 }
 
 /** Generates realistic CRSF telemetry so the screen can be tested without hardware. */
+/** Generates realistic CRSF telemetry so the screen can be tested without hardware. */
 function startSimulator({ onBytes, onStatus }: ConnectOptions): () => void {
-  onStatus('connected', 'Демо-симулятор');
+  onStatus('connected', tr("Демо-симулятор"));
   const t0 = Date.now();
   let mAh = 0;
   const homeLat = 50.4501;

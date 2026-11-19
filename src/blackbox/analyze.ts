@@ -1,4 +1,5 @@
 import { describeFlightModes, FlightEvent, findLogs, LogHeader, parseFrames, parseHeader, ParseResultInfo } from './parser';
+import { tr } from '../i18n';
 
 export interface AxisStats {
   max: number;
@@ -48,7 +49,7 @@ export function listLogs(bytes: Uint8Array): number[] {
 
 export function analyzeLog(bytes: Uint8Array, logIndex: number): LogAnalysis {
   const starts = findLogs(bytes);
-  if (starts.length === 0) throw new Error('Це не схоже на Blackbox лог (не знайдено заголовок "H Product:Blackbox").');
+  if (starts.length === 0) throw new Error(tr("Це не схоже на Blackbox лог (не знайдено заголовок \"H Product:Blackbox\")."));
   const idx = Math.max(0, Math.min(starts.length - 1, logIndex));
   const start = starts[idx];
   const end = idx + 1 < starts.length ? starts[idx + 1] : bytes.length;
@@ -226,7 +227,7 @@ export function analyzeLog(bytes: Uint8Array, logIndex: number): LogAnalysis {
     },
   });
 
-  if (count === 0) throw new Error('Лог не містить жодного валідного кадру даних (можливо пошкоджений).');
+  if (count === 0) throw new Error(tr("Лог не містить жодного валідного кадру даних (можливо пошкоджений)."));
 
   const durationSec = Math.max(0, (lastTime - firstTime) / 1e6);
   const raw = header.raw;
@@ -242,38 +243,38 @@ export function analyzeLog(bytes: Uint8Array, logIndex: number): LogAnalysis {
       : null;
 
   const insights: LogAnalysis['insights'] = [];
-  if (info.corruptFrames > 0) insights.push({ level: info.corruptFrames > 50 ? 'bad' : 'warn', text: `Пошкоджених кадрів: ${info.corruptFrames}. Можливо, флешка/SD карта не встигає писати.` });
+  if (info.corruptFrames > 0) insights.push({ level: info.corruptFrames > 50 ? 'bad' : 'warn', text: tr("Пошкоджених кадрів: {0}. Можливо, флешка/SD карта не встигає писати.", info.corruptFrames) });
   if (battery && cells > 0) {
     const perCellMin = battery.min / cells;
     const perCellEnd = battery.end / cells;
-    if (perCellMin < 3.0) insights.push({ level: 'bad', text: `Просідання до ${perCellMin.toFixed(2)} В/банку — акумулятор перевантажений або зношений.` });
-    else if (perCellMin < 3.3) insights.push({ level: 'warn', text: `Мінімум ${perCellMin.toFixed(2)} В/банку під навантаженням — близько до межі.` });
-    else insights.push({ level: 'ok', text: `Батарея ${cells}S тримає напругу добре (мін ${perCellMin.toFixed(2)} В/банку).` });
-    if (perCellEnd < 3.5) insights.push({ level: 'warn', text: `Посадка на ${perCellEnd.toFixed(2)} В/банку — варто сідати раніше, щоб берегти LiPo.` });
+    if (perCellMin < 3.0) insights.push({ level: 'bad', text: tr("Просідання до {0} В/банку — акумулятор перевантажений або зношений.", perCellMin.toFixed(2)) });
+    else if (perCellMin < 3.3) insights.push({ level: 'warn', text: tr("Мінімум {0} В/банку під навантаженням — близько до межі.", perCellMin.toFixed(2)) });
+    else insights.push({ level: 'ok', text: tr("Батарея {0}S тримає напругу добре (мін {1} В/банку).", cells, perCellMin.toFixed(2)) });
+    if (perCellEnd < 3.5) insights.push({ level: 'warn', text: tr("Посадка на {0} В/банку — варто сідати раніше, щоб берегти LiPo.", perCellEnd.toFixed(2)) });
   }
   const satPct = count ? (satFrames / count) * 100 : 0;
   if (iMotors.length) {
-    if (satPct > 5) insights.push({ level: 'warn', text: `Мотори в насиченні ${satPct.toFixed(1)}% часу — дрону бракує тяги або PID занадто агресивні.` });
+    if (satPct > 5) insights.push({ level: 'warn', text: tr("Мотори в насиченні {0}% часу — дрону бракує тяги або PID занадто агресивні.", satPct.toFixed(1)) });
     const avgs = mSum.map((v) => v / count);
     const spread = Math.max(...avgs) - Math.min(...avgs);
-    if (spread > 10) insights.push({ level: 'warn', text: `Нерівномірне навантаження моторів (різниця ${spread.toFixed(0)}%) — перевір центр мас, пропи чи мотор.` });
+    if (spread > 10) insights.push({ level: 'warn', text: tr("Нерівномірне навантаження моторів (різниця {0}%) — перевір центр мас, пропи чи мотор.", spread.toFixed(0)) });
   }
   const gAvg = gSum.map((v) => v / count);
-  if (gMax[0] > 1500 || gMax[1] > 1500) insights.push({ level: 'warn', text: 'Дуже високі кутові швидкості (>1500°/с) — можливі краш або сильні вібрації.' });
-  if (rMin < 30 && iRssi >= 0) insights.push({ level: 'warn', text: `RSSI падав до ${rMin.toFixed(0)}% — слабкий лінк у деяких місцях.` });
+  if (gMax[0] > 1500 || gMax[1] > 1500) insights.push({ level: 'warn', text: tr("Дуже високі кутові швидкості (>1500°/с) — можливі краш або сильні вібрації.") });
+  if (rMin < 30 && iRssi >= 0) insights.push({ level: 'warn', text: tr("RSSI падав до {0}% — слабкий лінк у деяких місцях.", rMin.toFixed(0)) });
   const disarms = events.filter((e) => e.type === 'Disarm');
   for (const d of disarms) {
-    if (d.detail && /Failsafe|Crash|Runaway/.test(d.detail)) insights.push({ level: 'bad', text: `Дізарм через: ${d.detail}.` });
+    if (d.detail && /Failsafe|Crash|Runaway/.test(d.detail)) insights.push({ level: 'bad', text: tr("Дізарм через: {0}.", d.detail) });
   }
-  if ([...modes].some((m) => m.includes('FAILSAFE'))) insights.push({ level: 'bad', text: 'Під час польоту спрацьовував FAILSAFE.' });
-  if (!insights.some((i) => i.level !== 'ok')) insights.push({ level: 'ok', text: 'Явних проблем не виявлено.' });
+  if ([...modes].some((m) => m.includes('FAILSAFE'))) insights.push({ level: 'bad', text: tr("Під час польоту спрацьовував FAILSAFE.") });
+  if (!insights.some((i) => i.level !== 'ok')) insights.push({ level: 'ok', text: tr("Явних проблем не виявлено.") });
 
   const keyList: [string, string][] = [
     ['Firmware', 'Firmware revision'],
-    ['Борт (craft)', 'Craft name'],
-    ['Плата', 'Board information'],
-    ['Дата логу', 'Log start datetime'],
-    ['Looptime, мкс', 'looptime'],
+    [tr("Борт (craft)"), 'Craft name'],
+    [tr("Плата"), 'Board information'],
+    [tr("Дата логу"), 'Log start datetime'],
+    [tr("Looptime, мкс"), 'looptime'],
     ['P interval / ratio', 'P interval'],
     ['Roll PID', 'rollPID'],
     ['Pitch PID', 'pitchPID'],

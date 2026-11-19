@@ -1,0 +1,20 @@
+{
+  "name": "whilefly-server",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "WhileFly backend: accounts, comrades (friends), direct & group chats, shared flight logs",
+  "engines": {
+    "node": ">=23.6"
+  },
+  "scripts": {
+    "start": "node src/index.ts",
+    "dev": "node --watch src/index.ts",
+    "test": "node test/smoke.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "~6.0.3"
+  }
+}

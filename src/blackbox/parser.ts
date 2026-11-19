@@ -1,3 +1,12 @@
+import { tr } from '../i18n';
+/**
+ * Betaflight / Cleanflight / INAV blackbox (.bbl / .bfl / .txt) binary log decoder.
+ *
+ * Implements the documented blackbox format: "H key:value" headers followed by
+ * I (intra), P (inter), S (slow), G (GPS), H (GPS home) and E (event) frames,
+ * with all field encodings and predictors used by Betaflight.
+ */
+
 /**
  * Betaflight / Cleanflight / INAV blackbox (.bbl / .bfl / .txt) binary log decoder.
  *
@@ -80,6 +89,7 @@ export interface ParseResultInfo {
 class EOFError extends Error {}
 
 /** Find byte offsets of every log inside the file (one file can contain many arm/disarm sessions). */
+/** Find byte offsets of every log inside the file (one file can contain many arm/disarm sessions). */
 export function findLogs(bytes: Uint8Array): number[] {
   const marker = Array.from(LOG_START_MARKER).map((c) => c.charCodeAt(0));
   const starts: number[] = [];
@@ -105,6 +115,7 @@ function hexToFloat(hex: string): number {
   return buf.getFloat32(0);
 }
 
+/** Parse all "H ..." header lines; returns header and offset where binary data begins. */
 /** Parse all "H ..." header lines; returns header and offset where binary data begins. */
 export function parseHeader(bytes: Uint8Array, start: number, end: number): { header: LogHeader; dataStart: number } {
   const raw: Record<string, string> = {};
@@ -182,10 +193,11 @@ export function parseHeader(bytes: Uint8Array, start: number, end: number): { he
 }
 
 /** Decode all frames of one log. */
+/** Decode all frames of one log. */
 export function parseFrames(bytes: Uint8Array, header: LogHeader, start: number, end: number, cb: ParseCallbacks): ParseResultInfo {
   const I = header.defs.I;
   const P = header.defs.P;
-  if (!I || !P) throw new Error('У заголовку логу немає опису полів (Field I name).');
+  if (!I || !P) throw new Error(tr("У заголовку логу немає опису полів (Field I name)."));
 
   const n = I.names.length;
   const motor0Index = I.names.indexOf('motor[0]');

@@ -11,8 +11,8 @@ ios/
 .env
 .env.local
 
-# backend lives in its own repo / deployment
-server/
+# server: code is versioned, the database (accounts, password hashes) and uploads are not
+server/data/
 
 # editor / tooling
 .claude/

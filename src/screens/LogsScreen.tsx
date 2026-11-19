@@ -1,92 +1,57 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
-import { Directory, File, Paths } from 'expo-file-system';
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { File } from 'expo-file-system';
+import React, { useCallback, useState } from 'react';
 import { ActivityIndicator, Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { analyzeLog, formatDuration, LogAnalysis, listLogs } from '../blackbox/analyze';
-import { sharedFromAnalysis } from '../api/logShare';
 import { LineChart } from '../components/LineChart';
-import { ShareLogSheet } from '../components/social';
 import { Bar, Button, Card, Chip, KV, Row, ScreenHeader, Stat, StatGrid, styles } from '../components/ui';
-import { useApp } from '../state/AppContext';
 import { colors, seriesColors } from '../theme';
+import { tr } from '../i18n';
 
 interface OpenedFile {
   name: string;
   uri: string;
   bytes: Uint8Array;
   logCount: number;
-  storedUri?: string;
 }
 
-export default function LogsScreen({ route, navigation }: any) {
-  const { addLog, logs } = useApp();
+export default function LogsScreen() {
   const [file, setFile] = useState<OpenedFile | null>(null);
   const [analysis, setAnalysis] = useState<LogAnalysis | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showAllHeaders, setShowAllHeaders] = useState(false);
-  const [shareOpen, setShareOpen] = useState(false);
-  const logsRef = useRef(logs);
-  logsRef.current = logs;
 
-  const runAnalysis = useCallback(
-    (f: OpenedFile, index: number, save: boolean) => {
-      setBusy(true);
-      setError(null);
-      // let the spinner render before the heavy synchronous decode
-      setTimeout(async () => {
-        try {
-          const a = analyzeLog(f.bytes, index);
-          setAnalysis(a);
-          if (save) {
-            const already = logsRef.current.some((l) => l.fileName === f.name && l.logIndex === index && Math.abs(l.durationSec - a.durationSec) < 0.5);
-            if (!already) {
-              const storedUri = f.storedUri ?? (await persistFile(f));
-              f.storedUri = storedUri;
-              addLog({
-                fileName: f.name,
-                storedUri,
-                logIndex: index,
-                craftName: a.craftName,
-                firmware: a.firmware,
-                durationSec: a.durationSec,
-                maxThrottle: a.throttle?.maxPct,
-                mAh: a.current?.mAh,
-                minCellV: a.battery && a.battery.cells ? a.battery.min / a.battery.cells : undefined,
-                maxGyro: a.gyro ? Math.max(a.gyro[0].max, a.gyro[1].max, a.gyro[2].max) : undefined,
-                maxSpeedKmh: a.gps?.maxSpeedKmh,
-                issues: a.insights.filter((i) => i.level !== 'ok').length,
-                issueTexts: a.insights.filter((i) => i.level !== 'ok').map((i) => i.text).slice(0, 6),
-                cells: a.battery?.cells || undefined,
-                maxAmps: a.current?.max,
-              });
-            }
-          }
-        } catch (e: any) {
-          setAnalysis(null);
-          setError(e?.message ?? String(e));
-        } finally {
-          setBusy(false);
-        }
-      }, 50);
-    },
-    [addLog],
-  );
+  const runAnalysis = useCallback((f: OpenedFile, index: number) => {
+    setBusy(true);
+    setError(null);
+    // let the spinner render before the heavy synchronous decode
+    setTimeout(() => {
+      try {
+        setAnalysis(analyzeLog(f.bytes, index));
+      } catch (e: any) {
+        setAnalysis(null);
+        setError(e?.message ?? String(e));
+      } finally {
+        setBusy(false);
+      }
+    }, 50);
+  }, []);
 
   const loadFromUri = useCallback(
-    async (uri: string, name: string, index: number, save: boolean, storedUri?: string) => {
+    async (uri: string, name: string) => {
       setBusy(true);
       setError(null);
       setAnalysis(null);
       try {
         const bytes = await new File(uri).bytes();
         const starts = listLogs(bytes);
-        if (starts.length === 0) throw new Error('Файл не містить Blackbox логів Betaflight. Підтримуються .bbl / .bfl / .txt з флешки чи SD.');
-        const f: OpenedFile = { name, uri, bytes, logCount: starts.length, storedUri };
+        if (starts.length === 0) throw new Error(tr("Файл не містить Blackbox логів Betaflight. Підтримуються .bbl / .bfl / .txt з флешки чи SD."));
+        const f: OpenedFile = { name, uri, bytes, logCount: starts.length };
         setFile(f);
-        runAnalysis(f, Math.min(index, starts.length - 1), save);
+        runAnalysis(f, 0);
       } catch (e: any) {
         setError(e?.message ?? String(e));
         setBusy(false);
@@ -95,39 +60,30 @@ export default function LogsScreen({ route, navigation }: any) {
     [runAnalysis],
   );
 
-  // opened from account history
-  useEffect(() => {
-    const p = route?.params;
-    if (p?.uri) {
-      loadFromUri(p.uri, p.name ?? 'log', p.logIndex ?? 0, false, p.uri);
-      navigation.setParams({ uri: undefined });
-    }
-  }, [route?.params?.uri]);
-
   const pick = async () => {
     // Android: read the system content:// URI directly. Copying into the shared cache makes the
     // file unreadable for expo-file-system in Expo Go (it only allows the app's own sandbox).
     const res = await DocumentPicker.getDocumentAsync({ type: '*/*', copyToCacheDirectory: Platform.OS !== 'android', multiple: false });
     if (res.canceled || !res.assets?.length) return;
     const asset = res.assets[0];
-    loadFromUri(asset.uri, asset.name ?? 'log.bbl', 0, true);
+    loadFromUri(asset.uri, asset.name ?? 'log.bbl');
   };
 
   const a = analysis;
-  const tLabels = (t: number[]): [string, string] => ['0 с', `${(t[t.length - 1] ?? 0).toFixed(0)} с`];
+  const tLabels = (t: number[]): [string, string] => [tr("0 с"), tr("{0} с", (t[t.length - 1] ?? 0).toFixed(0))];
 
   return (
     <SafeAreaView style={styles.screen} edges={['top']}>
       <ScrollView contentContainerStyle={styles.content}>
-        <ScreenHeader title="Blackbox логи" subtitle="Аналіз польотів Betaflight (.bbl / .bfl)" />
+        <ScreenHeader title={tr("Blackbox логи")} subtitle={tr("Аналіз польотів Betaflight (.bbl / .bfl)")} />
 
-        <Button title={file ? 'Відкрити інший лог' : 'Відкрити лог'} onPress={pick} disabled={busy} />
+        <Button title={file ? tr("Відкрити інший лог") : tr("Відкрити лог")} onPress={pick} disabled={busy} />
 
         {file && file.logCount > 1 ? (
-          <Card title={`У файлі ${file.logCount} польотів`}>
+          <Card title={tr("У файлі {0} польотів", file.logCount)}>
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
               {Array.from({ length: file.logCount }, (_, i) => (
-                <Chip key={i} label={`Політ ${i + 1}`} active={a?.index === i} onPress={() => runAnalysis(file, i, true)} />
+                <Chip key={i} label={tr("Політ {0}", i + 1)} active={a?.index === i} onPress={() => runAnalysis(file, i)} />
               ))}
             </View>
           </Card>
@@ -137,7 +93,7 @@ export default function LogsScreen({ route, navigation }: any) {
           <Card>
             <Row>
               <ActivityIndicator color={colors.accent} />
-              <Text style={styles.text}>Декодую лог…</Text>
+              <Text style={styles.text}>{tr("Декодую лог…")}</Text>
             </Row>
           </Card>
         ) : null}
@@ -151,8 +107,7 @@ export default function LogsScreen({ route, navigation }: any) {
         {!file && !busy ? (
           <Card>
             <Text style={styles.muted}>
-              Скопіюй лог з флешки польотника (Betaflight Configurator → Blackbox → «Activate Mass Storage» або SD карта) на телефон і відкрий тут. Отримаєш тривалість, батарею, газ, мотори, гіро, GPS, режими польоту, налаштування PID/фільтрів і підказки.
-            </Text>
+              {tr("Скопіюй лог з флешки польотника (Betaflight Configurator → Blackbox → «Activate Mass Storage» або SD карта) на телефон і відкрий тут. Отримаєш тривалість, батарею, газ, мотори, гіро, GPS, режими польоту, налаштування PID/фільтрів і підказки.")}</Text>
           </Card>
         ) : null}
 
@@ -160,21 +115,20 @@ export default function LogsScreen({ route, navigation }: any) {
           <>
             <Card title={a.craftName !== '—' ? a.craftName : file?.name}>
               <StatGrid>
-                <Stat label="Тривалість" value={formatDuration(a.durationSec)} />
-                <Stat label="Частота логу" value={a.sampleRateHz.toFixed(0)} unit="Гц" />
-                <Stat label="Кадрів" value={a.info.mainFrames.toLocaleString()} small />
-                <Stat label="Пошкоджено" value={String(a.info.corruptFrames)} small color={a.info.corruptFrames ? colors.warn : undefined} />
+                <Stat label={tr("Тривалість")} value={formatDuration(a.durationSec)} />
+                <Stat label={tr("Частота логу")} value={a.sampleRateHz.toFixed(0)} unit={tr("Гц")} />
+                <Stat label={tr("Кадрів")} value={a.info.mainFrames.toLocaleString()} small />
+                <Stat label={tr("Пошкоджено")} value={String(a.info.corruptFrames)} small color={a.info.corruptFrames ? colors.warn : undefined} />
               </StatGrid>
               <View style={{ marginTop: 12 }}>
-                <KV k="Прошивка" v={a.firmware} />
-                <KV k="Плата" v={a.board} />
-                <KV k="Дата" v={a.logDate} />
-                <KV k="Файл" v={file?.name ?? ''} />
+                <KV k={tr("Прошивка")} v={a.firmware} />
+                <KV k={tr("Плата")} v={a.board} />
+                <KV k={tr("Дата")} v={a.logDate} />
+                <KV k={tr("Файл")} v={file?.name ?? ''} />
               </View>
-              <Button title="Поділитися з побратимами" variant="ghost" onPress={() => setShareOpen(true)} style={{ marginTop: 12 }} />
             </Card>
 
-            <Card title="Висновки">
+            <Card title={tr("Висновки")}>
               {a.insights.map((ins, i) => (
                 <Row key={i} style={{ alignItems: 'flex-start', marginBottom: 8 }}>
                   <Ionicons
@@ -188,26 +142,26 @@ export default function LogsScreen({ route, navigation }: any) {
             </Card>
 
             {a.battery ? (
-              <Card title={`Батарея${a.battery.cells ? ` ${a.battery.cells}S` : ''}`}>
+              <Card title={tr("Батарея{0}", a.battery.cells ? ` ${a.battery.cells}S` : '')}>
                 <StatGrid>
-                  <Stat label="Старт" value={a.battery.start.toFixed(2)} unit="В" small />
-                  <Stat label="Кінець" value={a.battery.end.toFixed(2)} unit="В" small />
-                  <Stat label="Мінімум" value={a.battery.min.toFixed(2)} unit="В" small />
-                  <Stat label="Просідання" value={a.battery.sag.toFixed(2)} unit="В" small />
-                  {a.current ? <Stat label="Сер. струм" value={a.current.avg.toFixed(1)} unit="А" small /> : null}
-                  {a.current ? <Stat label="Пік струму" value={a.current.max.toFixed(1)} unit="А" small /> : null}
-                  {a.current ? <Stat label="Спожито" value={a.current.mAh.toFixed(0)} unit="мА·год" small /> : null}
+                  <Stat label={tr("Старт")} value={a.battery.start.toFixed(2)} unit={tr("В")} small />
+                  <Stat label={tr("Кінець")} value={a.battery.end.toFixed(2)} unit={tr("В")} small />
+                  <Stat label={tr("Мінімум")} value={a.battery.min.toFixed(2)} unit={tr("В")} small />
+                  <Stat label={tr("Просідання")} value={a.battery.sag.toFixed(2)} unit={tr("В")} small />
+                  {a.current ? <Stat label={tr("Сер. струм")} value={a.current.avg.toFixed(1)} unit={tr("А")} small /> : null}
+                  {a.current ? <Stat label={tr("Пік струму")} value={a.current.max.toFixed(1)} unit={tr("А")} small /> : null}
+                  {a.current ? <Stat label={tr("Спожито")} value={a.current.mAh.toFixed(0)} unit={tr("мА·год")} small /> : null}
                 </StatGrid>
                 <View style={{ marginTop: 12 }}>
                   <LineChart
-                    series={[{ name: 'Напруга', color: colors.accent, data: a.series.vbat }]}
-                    unit="В"
+                    series={[{ name: tr("Напруга"), color: colors.accent, data: a.series.vbat }]}
+                    unit={tr("В")}
                     height={120}
                     xLabels={tLabels(a.series.t)}
                   />
                   {a.current ? (
                     <View style={{ marginTop: 8 }}>
-                      <LineChart series={[{ name: 'Струм', color: colors.warn, data: a.series.amps }]} unit="А" height={100} />
+                      <LineChart series={[{ name: tr("Струм"), color: colors.warn, data: a.series.amps }]} unit={tr("А")} height={100} />
                     </View>
                   ) : null}
                 </View>
@@ -215,12 +169,12 @@ export default function LogsScreen({ route, navigation }: any) {
             ) : null}
 
             {a.throttle || a.motors ? (
-              <Card title="Газ і мотори">
+              <Card title={tr("Газ і мотори")}>
                 {a.throttle ? (
                   <StatGrid>
-                    <Stat label="Сер. газ" value={a.throttle.avgPct.toFixed(0)} unit="%" small />
-                    <Stat label="Макс газ" value={a.throttle.maxPct.toFixed(0)} unit="%" small />
-                    <Stat label="Фулл-газ" value={a.throttle.fullThrottleSec.toFixed(1)} unit="с" small />
+                    <Stat label={tr("Сер. газ")} value={a.throttle.avgPct.toFixed(0)} unit="%" small />
+                    <Stat label={tr("Макс газ")} value={a.throttle.maxPct.toFixed(0)} unit="%" small />
+                    <Stat label={tr("Фулл-газ")} value={a.throttle.fullThrottleSec.toFixed(1)} unit={tr("с")} small />
                   </StatGrid>
                 ) : null}
                 {a.motors ? (
@@ -234,13 +188,13 @@ export default function LogsScreen({ route, navigation }: any) {
                         </Text>
                       </Row>
                     ))}
-                    <Text style={styles.muted}>Насичення моторів: {a.motors.saturationPct.toFixed(1)}% часу</Text>
+                    <Text style={styles.muted}>{tr("Насичення моторів: ")}{a.motors.saturationPct.toFixed(1)}{tr("% часу")}</Text>
                   </View>
                 ) : null}
                 <View style={{ marginTop: 12 }}>
                   <LineChart
                     series={[
-                      { name: 'Газ', color: colors.text, data: a.series.throttle },
+                      { name: tr("Газ"), color: colors.text, data: a.series.throttle },
                       ...a.series.motors.map((d, m) => ({ name: `M${m + 1}`, color: seriesColors[m % seriesColors.length], data: d })),
                     ]}
                     unit="%"
@@ -254,11 +208,11 @@ export default function LogsScreen({ route, navigation }: any) {
             ) : null}
 
             {a.gyro ? (
-              <Card title="Гіроскоп">
+              <Card title={tr("Гіроскоп")}>
                 <StatGrid>
-                  <Stat label="Roll max" value={a.gyro[0].max.toFixed(0)} unit="°/с" small />
-                  <Stat label="Pitch max" value={a.gyro[1].max.toFixed(0)} unit="°/с" small />
-                  <Stat label="Yaw max" value={a.gyro[2].max.toFixed(0)} unit="°/с" small />
+                  <Stat label="Roll max" value={a.gyro[0].max.toFixed(0)} unit={tr("°/с")} small />
+                  <Stat label="Pitch max" value={a.gyro[1].max.toFixed(0)} unit={tr("°/с")} small />
+                  <Stat label="Yaw max" value={a.gyro[2].max.toFixed(0)} unit={tr("°/с")} small />
                 </StatGrid>
                 <View style={{ marginTop: 12 }}>
                   <LineChart
@@ -267,7 +221,7 @@ export default function LogsScreen({ route, navigation }: any) {
                       { name: 'Pitch', color: seriesColors[1], data: a.series.gyro[1] },
                       { name: 'Yaw', color: seriesColors[2], data: a.series.gyro[2] },
                     ]}
-                    unit="°/с"
+                    unit={tr("°/с")}
                     height={150}
                     xLabels={tLabels(a.series.t)}
                   />
@@ -278,19 +232,19 @@ export default function LogsScreen({ route, navigation }: any) {
             {a.gps ? (
               <Card title="GPS">
                 <StatGrid>
-                  <Stat label="Макс швидкість" value={a.gps.maxSpeedKmh.toFixed(0)} unit="км/год" small />
-                  <Stat label="Макс висота" value={a.gps.maxAltM.toFixed(0)} unit="м" small />
-                  <Stat label="Дальність" value={(a.gps.maxDistM / 1000).toFixed(2)} unit="км" small />
-                  <Stat label="Супутників" value={String(a.gps.maxSats)} small />
+                  <Stat label={tr("Макс швидкість")} value={a.gps.maxSpeedKmh.toFixed(0)} unit={tr("км/год")} small />
+                  <Stat label={tr("Макс висота")} value={a.gps.maxAltM.toFixed(0)} unit={tr("м")} small />
+                  <Stat label={tr("Дальність")} value={(a.gps.maxDistM / 1000).toFixed(2)} unit={tr("км")} small />
+                  <Stat label={tr("Супутників")} value={String(a.gps.maxSats)} small />
                 </StatGrid>
               </Card>
             ) : null}
 
             {a.rssi ? (
-              <Card title="Радіолінк (RSSI)">
+              <Card title={tr("Радіолінк (RSSI)")}>
                 <StatGrid>
-                  <Stat label="Мінімум" value={a.rssi.min.toFixed(0)} unit="%" small />
-                  <Stat label="Середнє" value={a.rssi.avg.toFixed(0)} unit="%" small />
+                  <Stat label={tr("Мінімум")} value={a.rssi.min.toFixed(0)} unit="%" small />
+                  <Stat label={tr("Середнє")} value={a.rssi.avg.toFixed(0)} unit="%" small />
                 </StatGrid>
                 <View style={{ marginTop: 12 }}>
                   <LineChart series={[{ name: 'RSSI', color: colors.blue, data: a.series.rssi }]} unit="%" height={100} fixedMin={0} fixedMax={100} />
@@ -299,7 +253,7 @@ export default function LogsScreen({ route, navigation }: any) {
             ) : null}
 
             {a.flightModes.length || a.events.length ? (
-              <Card title="Режими і події">
+              <Card title={tr("Режими і події")}>
                 {a.flightModes.length ? (
                   <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
                     {a.flightModes.map((m) => (
@@ -310,18 +264,18 @@ export default function LogsScreen({ route, navigation }: any) {
                   </View>
                 ) : null}
                 {a.events.slice(0, 30).map((e, i) => (
-                  <KV key={i} k={e.type} v={`${e.detail ?? ''}${e.timeUs ? `  @${(e.timeUs / 1e6).toFixed(1)}с` : ''}`} />
+                  <KV key={i} k={e.type} v={`${e.detail ?? ''}${e.timeUs ? tr("  @{0}с", (e.timeUs / 1e6).toFixed(1)) : ''}`} />
                 ))}
               </Card>
             ) : null}
 
-            <Card title="Налаштування (PID / фільтри / rates)">
+            <Card title={tr("Налаштування (PID / фільтри / rates)")}>
               {a.keySettings.map(([k, v]) => (
                 <KV key={k} k={k} v={v} />
               ))}
               <Pressable onPress={() => setShowAllHeaders((x) => !x)} style={{ marginTop: 10 }}>
                 <Text style={{ color: colors.blue, fontWeight: '600' }}>
-                  {showAllHeaders ? 'Сховати всі заголовки' : `Показати всі заголовки (${Object.keys(a.header.raw).length})`}
+                  {showAllHeaders ? tr("Сховати всі заголовки") : tr("Показати всі заголовки ({0})", Object.keys(a.header.raw).length)}
                 </Text>
               </Pressable>
               {showAllHeaders
@@ -333,28 +287,6 @@ export default function LogsScreen({ route, navigation }: any) {
           </>
         ) : null}
       </ScrollView>
-      <ShareLogSheet
-        visible={shareOpen}
-        log={a ? sharedFromAnalysis(a, file?.name) : null}
-        onClose={() => setShareOpen(false)}
-        onLogin={() => navigation.navigate('Comms')}
-      />
     </SafeAreaView>
   );
-}
-
-async function persistFile(f: OpenedFile): Promise<string | undefined> {
-  try {
-    const dir = new Directory(Paths.document, 'logs');
-    dir.create({ intermediates: true, idempotent: true });
-    const safeName = f.name.replace(/[^\w.\-]+/g, '_');
-    const dest = new File(dir, `${Date.now()}_${safeName}`);
-    // write the bytes we already read instead of copying from the picker's cache
-    if (!dest.exists) dest.create();
-    await dest.write(f.bytes);
-    return dest.uri;
-  } catch (e) {
-    console.warn('Could not persist log', e);
-    return undefined;
-  }
 }
